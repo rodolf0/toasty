@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Toasty
+Comment=Experimental search provider
+Exec=gnome-calculator
+Icon=org.gnome.Calculator
+Terminal=false
+Type=Application

@@ -1,7 +1,12 @@
-use dbus::tree::{MTFn, MethodInfo, Interface, MethodResult};
+#![deny(warnings)]
+
+use shunting::{ShuntingParser, MathContext};
+
+use dbus::tree::{MTFn, MethodInfo, Interface, MethodResult, MethodErr};
 use dbus::arg::Variant;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, Once};
 
 fn connect() -> Result<dbus::Connection, dbus::Error> {
     const BUS_NAME: &str = "rodolf0.toasty.SearchProvider";
@@ -10,23 +15,40 @@ fn connect() -> Result<dbus::Connection, dbus::Error> {
     Ok(conn)
 }
 
+fn ctx() -> &'static Mutex<HashSet<String>> {
+    // map from result-id to context
+    static INIT: Once = Once::new();
+    static mut CTX: Option<Mutex<HashSet<String>>> = None;
+    unsafe {
+        INIT.call_once(|| { CTX = Some(Mutex::new(HashSet::new())); });
+        CTX.as_ref().unwrap()
+    }
+}
+
+
 fn get_initial_resultset(minfo: &MethodInfo<MTFn<()>, ()>) -> MethodResult {
-    // Get call arguments
     let terms: Vec<String> = minfo.msg.read1()?;
     eprintln!("GetInitialResultSet terms={:?}", terms);
-    // results
-    let s = vec!(format!("test-1!"), format!("test-2!"));
-    let mret = minfo.msg.method_return().append1(s);
+
+    // Just use the merged terms as result-id
+    let expr = terms.join(" ");
+    ctx().lock().unwrap().insert(expr.clone());
+    let result_ids = vec!(expr);
+
+    let mret = minfo.msg.method_return().append1(result_ids);
     Ok(vec!(mret))
 }
 
 fn get_subsearch_resultset(minfo: &MethodInfo<MTFn<()>, ()>) -> MethodResult {
-    // Get call arguments
     let (prev, terms): (Vec<String>, Vec<String>) = minfo.msg.read2()?;
     eprintln!("GetSubsearchResultSet prev={:?} terms={:?}", prev, terms);
-    // results
-    let s = vec!(format!("test-3!"));
-    let mret = minfo.msg.method_return().append1(s);
+
+    // Called to refine search within initial results, nothing we wanna do here
+    let expr = terms.join(" ");
+    ctx().lock().unwrap().insert(expr.clone());
+    let result_ids = vec!(expr);
+
+    let mret = minfo.msg.method_return().append1(result_ids);
     Ok(vec!(mret))
 }
 
@@ -36,12 +58,23 @@ type MetasMap = HashMap<String, Variant<String>>;
 fn get_result_metas(minfo: &MethodInfo<MTFn<()>, ()>) -> MethodResult {
     let ids: Vec<String> = minfo.msg.read1()?;
     eprintln!("GetResultMetas ids={:?}", ids);
-    let mut metas = MetasMap::new();
-    metas.insert(format!("name"), Variant(format!("meta-name")));
-    metas.insert(format!("id"), Variant(format!("test-3!")));
-    metas.insert(format!("description"), Variant(format!("the test-3! thingy")));
 
-    let mret = minfo.msg.method_return().append1(vec!(metas));
+    // We're storing the
+    let mut metas = Vec::new();
+    for input in ids {
+        let expr = ShuntingParser::parse_str(&input)
+            .map_err(|_| MethodErr::invalid_arg(&"Can't parse input"))?;
+        let result = MathContext::new().eval(&expr)
+            .map_err(|_| MethodErr::invalid_arg(&"Can't eval input"))?;
+
+        let mut meta = MetasMap::new();
+        meta.insert(format!("name"), Variant(result.to_string()));
+        meta.insert(format!("id"), Variant(input.clone()));
+        meta.insert(format!("description"), Variant(input));
+        metas.push(meta);
+    }
+
+    let mret = minfo.msg.method_return().append1(metas);
     Ok(vec!(mret))
 }
 
@@ -59,8 +92,9 @@ fn launch_search(minfo: &MethodInfo<MTFn<()>, ()>) -> MethodResult {
 
 fn search_iface() -> Interface<MTFn<()>, ()> {
     let f = dbus::tree::Factory::new_fn();
+    // DOCS: org.gnome.ShellSearchProvider2.xml
     f.interface("org.gnome.Shell.SearchProvider2", ())
-        // callback receives MethodInfo
+
         .add_m(f.method("GetInitialResultSet", (), get_initial_resultset)
                .inarg::<Vec<String>,_>("terms")
                .outarg::<Vec<String>,_>("results"))
@@ -91,10 +125,12 @@ fn main() {
     // factory is used for creating object-paths, methods, interfaces, etc.
     let f = dbus::tree::Factory::new_fn();
 
+    let search_interface = search_iface();
+
     // Create a tree with single object-path for our search
     const SEARCH_PATH: &str = "/rodolf0/toasty/SearchProvider";
     let tree = f.tree(()).add(
-        f.object_path(SEARCH_PATH, ()).introspectable().add(search_iface()));
+        f.object_path(SEARCH_PATH, ()).introspectable().add(search_interface));
 
     // Register all object paths in the tree.
     tree.set_registered(&conn, true).unwrap();
