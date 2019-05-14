@@ -1,11 +1,12 @@
+# Documentation
+
+A template project to build Search Providers for Gnome shell.
+
 ## Setup
 
-Gnome docs https://developer.gnome.org/SearchProvider/
+1. Create a .search-provider.ini file somewhere in $(datadir)/gnome-shell/search-providers. For example: /usr/share/gnome-shell/search-providers/rodolf0.toasty.search-provider.ini (There's a template at rodolf0.toasty.search-provider.ini).
+1. The DesktopId key has to reference a valid `.desktop` application (see Toasty.desktop).
 
-- You need a .search-provider.ini file somewhere in $(datadir)/gnome-shell/search-providers.
-  For example: /usr/share/gnome-shell/search-providers/rodolf0.toasty.search-provider.ini
-  There's a template at rodolf0.toasty.search-provider.ini
-  NOTE: tried setting this in .local/share/gnome-shell/search-providers/ but didn't get loaded.
 
-- The content has to reference a valid `.desktop` application in DesktopId
-  For example: Toasty.desktop
+### References
+- Gnome docs https://developer.gnome.org/SearchProvider/
