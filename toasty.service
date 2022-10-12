@@ -1,0 +1,12 @@
+[Unit]
+AssertPathExists=/home/rudolph/Source/toasty
+
+[Service]
+WorkingDirectory=/home/rudolph/Source/toasty
+ExecStart=/home/rudolph/.cargo/bin/cargo run
+Restart=always
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

@@ -1,9 +1,10 @@
 [package]
 name = "toasty"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Rodolfo Granata <warlock.cc@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-dbus = "0.6.4"
-shunting = "0.0.3"
+# dbus = "0.9"
+dbus = "0.6"
+shunting = "0.1"
